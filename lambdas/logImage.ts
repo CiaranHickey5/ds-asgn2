@@ -30,7 +30,7 @@ export const handler: SQSHandler = async (event) => {
         // Validate file type
         if (!["jpeg", "png"].includes(fileExtension || "")) {
           console.error(`Invalid file type: ${fileExtension}`);
-          continue;
+          throw new Error(`Unsupported file type: ${fileExtension}`); 
         }
 
         // Add record to DynamoDB

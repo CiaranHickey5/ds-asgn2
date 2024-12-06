@@ -33,7 +33,7 @@ export class Asgn2Stack extends cdk.Stack {
       receiveMessageWaitTime: cdk.Duration.seconds(10),
       deadLetterQueue: {
         queue: imageDLQ,
-        maxReceiveCount: 5,
+        maxReceiveCount: 1,
       },
     });
 
