@@ -43,12 +43,12 @@ export class Asgn2Stack extends cdk.Stack {
 
     // Lambda functions
 
-    const processImageFn = new lambdanode.NodejsFunction(
+    const logImageFn = new lambdanode.NodejsFunction(
       this,
-      "ProcessImageFn",
+      "LogImageFn",
       {
         runtime: lambda.Runtime.NODEJS_18_X,
-        entry: `${__dirname}/../lambdas/processImage.ts`,
+        entry: `${__dirname}/../lambdas/logImage.ts`,
         timeout: cdk.Duration.seconds(15),
         memorySize: 128,
       }
@@ -75,7 +75,7 @@ export class Asgn2Stack extends cdk.Stack {
 
     // Permissions
 
-    imagesBucket.grantRead(processImageFn);
+    imagesBucket.grantRead(logImageFn);
 
     mailerFn.addToRolePolicy(
       new iam.PolicyStatement({
