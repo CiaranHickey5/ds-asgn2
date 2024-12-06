@@ -10,7 +10,6 @@ import * as subs from "aws-cdk-lib/aws-sns-subscriptions";
 import * as iam from "aws-cdk-lib/aws-iam";
 
 import { Construct } from "constructs";
-// import * as sqs from 'aws-cdk-lib/aws-sqs';
 
 export class Asgn2Stack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -106,24 +105,24 @@ export class Asgn2Stack extends cdk.Stack {
       },
     });
 
-    // S3 --> SNS
+    // S3 --> SNS (Object Created Event)
     imagesBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
       new s3n.SnsDestination(newImageTopic)
     );
 
-    // SNS --> SQS --> Lambda
+    // SNS --> SQS --> Lambda (Log Image)
+    // Subscribe LogImageFn Lambda to the SNS topic without filter policy
     newImageTopic.addSubscription(new subs.SqsSubscription(imageLogQueue));
+
+    // SNS --> SQS --> Lambda (Confirmation Mailer)
+    // Subscribe Confirmation Mailer Queue to the SNS topic without filter policy
     newImageTopic.addSubscription(
       new subs.SqsSubscription(confirmationMailerQ)
     );
 
-    logImageFn.addEventSource(new events.SqsEventSource(imageLogQueue));
-    confirmationMailerFn.addEventSource(newImageMailEventSource);
-
-    rejectionFn.addEventSource(new events.SqsEventSource(imageDLQ));
-
-    // Add filter policies for metadata to SNS subscriptions
+    // SNS --> Lambda (Update Table for Metadata Updates)
+    // Subscribe UpdateTableFn Lambda to the SNS topic with a filter policy to allow only metadata updates
     newImageTopic.addSubscription(
       new subs.LambdaSubscription(updateTableFn, {
         filterPolicy: {
@@ -134,8 +133,14 @@ export class Asgn2Stack extends cdk.Stack {
       })
     );
 
-    // Permissions
+    // Lambda Event Sources
+    logImageFn.addEventSource(new events.SqsEventSource(imageLogQueue));
+    confirmationMailerFn.addEventSource(
+      new events.SqsEventSource(confirmationMailerQ)
+    );
+    rejectionFn.addEventSource(new events.SqsEventSource(imageDLQ));
 
+    // Permissions
     imagesBucket.grantReadWrite(logImageFn);
     imageTable.grantWriteData(logImageFn);
     imageTable.grantWriteData(updateTableFn);
@@ -165,7 +170,6 @@ export class Asgn2Stack extends cdk.Stack {
     );
 
     // Output
-
     new cdk.CfnOutput(this, "bucketName", {
       value: imagesBucket.bucketName,
     });
