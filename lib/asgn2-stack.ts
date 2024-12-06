@@ -42,24 +42,25 @@ export class Asgn2Stack extends cdk.Stack {
     });
 
     const imageTable = new cdk.aws_dynamodb.Table(this, "ImageTable", {
-      partitionKey: { name: "fileName", type: cdk.aws_dynamodb.AttributeType.STRING },
+      partitionKey: {
+        name: "fileName",
+        type: cdk.aws_dynamodb.AttributeType.STRING,
+      },
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Use RETAIN for production
       billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
     });
-    
 
     // Lambda functions
 
-    const logImageFn = new lambdanode.NodejsFunction(
-      this,
-      "LogImageFn",
-      {
-        runtime: lambda.Runtime.NODEJS_18_X,
-        entry: `${__dirname}/../lambdas/logImage.ts`,
-        timeout: cdk.Duration.seconds(15),
-        memorySize: 128,
-      }
-    );
+    const logImageFn = new lambdanode.NodejsFunction(this, "LogImageFn", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      entry: `${__dirname}/../lambdas/logImage.ts`,
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 128,
+      environment: {
+        IMAGE_TABLE_NAME: imageTable.tableName,
+      },
+    });
 
     const mailerFn = new lambdanode.NodejsFunction(this, "mailer-function", {
       runtime: lambda.Runtime.NODEJS_16_X,
@@ -74,18 +75,17 @@ export class Asgn2Stack extends cdk.Stack {
       new s3n.SnsDestination(newImageTopic)
     );
 
-    // SQS --> Lambda
+    // SNS --> SQS --> Lambda
     newImageTopic.addSubscription(new subs.SqsSubscription(imageProcessQueue));
     newImageTopic.addSubscription(new subs.SqsSubscription(mailerQ));
 
+    logImageFn.addEventSource(new events.SqsEventSource(imageProcessQueue));
     mailerFn.addEventSource(newImageMailEventSource);
 
     // Permissions
 
-    imagesBucket.grantRead(logImageFn);
+    imagesBucket.grantReadWrite(logImageFn);
     imageTable.grantWriteData(logImageFn);
-    
-    logImageFn.addEnvironment("IMAGE_TABLE_NAME", imageTable.tableName);
 
     mailerFn.addToRolePolicy(
       new iam.PolicyStatement({

@@ -7,11 +7,16 @@ import {
 } from "@aws-sdk/client-s3";
 
 const dynamoDb = new DynamoDBClient({});
-const s3 = new S3Client();
+const s3 = new S3Client({});
 const tableName = process.env.IMAGE_TABLE_NAME;
 
 export const handler: SQSHandler = async (event) => {
   console.log("Event: ", JSON.stringify(event));
+
+  if (!tableName) {
+    console.error("Table name is not defined in environment variables.");
+    throw new Error("IMAGE_TABLE_NAME environment variable is missing.");
+  }
 
   for (const record of event.Records) {
     const recordBody = JSON.parse(record.body); // Parse SQS message
@@ -28,7 +33,7 @@ export const handler: SQSHandler = async (event) => {
         // Validate file type
         if (!["jpeg", "png"].includes(fileExtension || "")) {
           console.error(`Invalid file type: ${fileExtension}`);
-          throw new Error(`Unsupported file type: ${fileExtension}`);
+          continue;
         }
 
         console.log(`Processing valid file: ${srcKey}`);
@@ -45,7 +50,6 @@ export const handler: SQSHandler = async (event) => {
           console.log(`File ${srcKey} added to DynamoDB table.`);
         } catch (error) {
           console.error("Error writing to DynamoDB:", error);
-          throw error;
         }
       }
     }
