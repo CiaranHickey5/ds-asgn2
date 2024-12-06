@@ -4,19 +4,12 @@ import {
   SendEmailCommand,
   SendEmailCommandInput,
 } from "@aws-sdk/client-ses";
+import { SES_EMAIL_FROM, SES_REGION, SES_EMAIL_TO } from "../env";
 
-const client = new SESClient({ region: process.env.SES_REGION });
-const senderEmail = process.env.SES_EMAIL_FROM;
-const recipientEmail = process.env.SES_EMAIL_TO;
+const ses = new SESClient({ region: SES_REGION });
+const senderEmail = SES_EMAIL_FROM;
 
 export const handler: DynamoDBStreamHandler = async (event) => {
-  if (!senderEmail || !recipientEmail) {
-    console.error("Sender or recipient email is not defined.");
-    throw new Error(
-      "SES_EMAIL_FROM or SES_EMAIL_TO environment variables are missing."
-    );
-  }
-
   for (const record of event.Records) {
     if (record.eventName === "INSERT") {
       const newImage = record.dynamodb?.NewImage;
@@ -25,7 +18,7 @@ export const handler: DynamoDBStreamHandler = async (event) => {
 
         const params: SendEmailCommandInput = {
           Destination: {
-            ToAddresses: [recipientEmail],
+            ToAddresses: [SES_EMAIL_TO],
           },
           Message: {
             Body: {
@@ -43,7 +36,7 @@ export const handler: DynamoDBStreamHandler = async (event) => {
         };
 
         try {
-          await client.send(new SendEmailCommand(params));
+          await ses.send(new SendEmailCommand(params));
           console.log(`Email notification sent for new image: ${fileName}`);
         } catch (error) {
           console.error("Error sending email notification:", error);
