@@ -78,6 +78,13 @@ export class Asgn2Stack extends cdk.Stack {
       entry: `${__dirname}/../lambdas/mailer.ts`,
     });
 
+    const rejectionFn = new lambdanode.NodejsFunction(this, "RejectionLambda", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(15),
+      entry: `${__dirname}/../lambdas/rejectionMailer.ts`,
+    });
+
     // S3 --> SNS
     imagesBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
@@ -91,12 +98,26 @@ export class Asgn2Stack extends cdk.Stack {
     logImageFn.addEventSource(new events.SqsEventSource(imageLogQueue));
     mailerFn.addEventSource(newImageMailEventSource);
 
+    rejectionFn.addEventSource(new events.SqsEventSource(imageDLQ));
+
     // Permissions
 
     imagesBucket.grantReadWrite(logImageFn);
     imageTable.grantWriteData(logImageFn);
 
     mailerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "ses:SendEmail",
+          "ses:SendRawEmail",
+          "ses:SendTemplatedEmail",
+        ],
+        resources: ["*"],
+      })
+    );
+
+    rejectionFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: [
