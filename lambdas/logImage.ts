@@ -11,8 +11,6 @@ const s3 = new S3Client({});
 const tableName = process.env.IMAGE_TABLE_NAME;
 
 export const handler: SQSHandler = async (event) => {
-  console.log("Event: ", JSON.stringify(event));
-
   if (!tableName) {
     console.error("Table name is not defined in environment variables.");
     throw new Error("IMAGE_TABLE_NAME environment variable is missing.");
@@ -23,7 +21,6 @@ export const handler: SQSHandler = async (event) => {
     const snsMessage = JSON.parse(recordBody.Message); // Parse SNS message
 
     if (snsMessage.Records) {
-      console.log("SNS Records: ", JSON.stringify(snsMessage));
       for (const messageRecord of snsMessage.Records) {
         const s3e = messageRecord.s3;
         const srcBucket = s3e.bucket.name;
@@ -36,8 +33,6 @@ export const handler: SQSHandler = async (event) => {
           continue;
         }
 
-        console.log(`Processing valid file: ${srcKey}`);
-
         // Add record to DynamoDB
         try {
           const params = {
@@ -47,7 +42,6 @@ export const handler: SQSHandler = async (event) => {
             },
           };
           await dynamoDb.send(new PutItemCommand(params));
-          console.log(`File ${srcKey} added to DynamoDB table.`);
         } catch (error) {
           console.error("Error writing to DynamoDB:", error);
         }

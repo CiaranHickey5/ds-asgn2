@@ -24,8 +24,17 @@ export class Asgn2Stack extends cdk.Stack {
 
     // Integration infrastructure
 
-    const imageProcessQueue = new sqs.Queue(this, "img-created-queue", {
+    const imageDLQ = new sqs.Queue(this, "img-created-dlq", {
       receiveMessageWaitTime: cdk.Duration.seconds(10),
+      retentionPeriod: cdk.Duration.days(14),
+    });
+
+    const imageLogQueue = new sqs.Queue(this, "img-created-queue", {
+      receiveMessageWaitTime: cdk.Duration.seconds(10),
+      deadLetterQueue: {
+        queue: imageDLQ,
+        maxReceiveCount: 5,
+      },
     });
 
     const newImageTopic = new sns.Topic(this, "NewImageTopic", {
@@ -76,10 +85,10 @@ export class Asgn2Stack extends cdk.Stack {
     );
 
     // SNS --> SQS --> Lambda
-    newImageTopic.addSubscription(new subs.SqsSubscription(imageProcessQueue));
+    newImageTopic.addSubscription(new subs.SqsSubscription(imageLogQueue));
     newImageTopic.addSubscription(new subs.SqsSubscription(mailerQ));
 
-    logImageFn.addEventSource(new events.SqsEventSource(imageProcessQueue));
+    logImageFn.addEventSource(new events.SqsEventSource(imageLogQueue));
     mailerFn.addEventSource(newImageMailEventSource);
 
     // Permissions
