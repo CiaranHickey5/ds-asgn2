@@ -23,6 +23,7 @@
     "@aws-sdk/client-dynamodb": "^3.705.0",
     "@aws-sdk/client-s3": "^3.685.0",
     "@aws-sdk/client-ses": "^3.682.0",
+    "@aws-sdk/client-sns": "^3.699.0",
     "@aws-sdk/client-sqs": "^3.682.0",
     "@aws-sdk/lib-dynamodb": "^3.658.1",
     "@aws-sdk/util-dynamodb": "^3.658.1",

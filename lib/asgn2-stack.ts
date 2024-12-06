@@ -41,14 +41,21 @@ export class Asgn2Stack extends cdk.Stack {
       displayName: "New Image topic",
     });
 
-    const mailerQ = new sqs.Queue(this, "mailer-queue", {
-      receiveMessageWaitTime: cdk.Duration.seconds(10),
-    });
+    const confirmationMailerQ = new sqs.Queue(
+      this,
+      "confirmationMailer-queue",
+      {
+        receiveMessageWaitTime: cdk.Duration.seconds(10),
+      }
+    );
 
-    const newImageMailEventSource = new events.SqsEventSource(mailerQ, {
-      batchSize: 5,
-      maxBatchingWindow: cdk.Duration.seconds(5),
-    });
+    const newImageMailEventSource = new events.SqsEventSource(
+      confirmationMailerQ,
+      {
+        batchSize: 5,
+        maxBatchingWindow: cdk.Duration.seconds(5),
+      }
+    );
 
     const imageTable = new cdk.aws_dynamodb.Table(this, "ImageTable", {
       partitionKey: {
@@ -71,12 +78,16 @@ export class Asgn2Stack extends cdk.Stack {
       },
     });
 
-    const mailerFn = new lambdanode.NodejsFunction(this, "mailer-function", {
-      runtime: lambda.Runtime.NODEJS_16_X,
-      memorySize: 1024,
-      timeout: cdk.Duration.seconds(3),
-      entry: `${__dirname}/../lambdas/mailer.ts`,
-    });
+    const confirmationMailerFn = new lambdanode.NodejsFunction(
+      this,
+      "confirmationMailer-function",
+      {
+        runtime: lambda.Runtime.NODEJS_16_X,
+        memorySize: 1024,
+        timeout: cdk.Duration.seconds(3),
+        entry: `${__dirname}/../lambdas/confirmationMailer.ts`,
+      }
+    );
 
     const rejectionFn = new lambdanode.NodejsFunction(this, "RejectionLambda", {
       runtime: lambda.Runtime.NODEJS_18_X,
@@ -93,10 +104,12 @@ export class Asgn2Stack extends cdk.Stack {
 
     // SNS --> SQS --> Lambda
     newImageTopic.addSubscription(new subs.SqsSubscription(imageLogQueue));
-    newImageTopic.addSubscription(new subs.SqsSubscription(mailerQ));
+    newImageTopic.addSubscription(
+      new subs.SqsSubscription(confirmationMailerQ)
+    );
 
     logImageFn.addEventSource(new events.SqsEventSource(imageLogQueue));
-    mailerFn.addEventSource(newImageMailEventSource);
+    confirmationMailerFn.addEventSource(newImageMailEventSource);
 
     rejectionFn.addEventSource(new events.SqsEventSource(imageDLQ));
 
@@ -105,7 +118,7 @@ export class Asgn2Stack extends cdk.Stack {
     imagesBucket.grantReadWrite(logImageFn);
     imageTable.grantWriteData(logImageFn);
 
-    mailerFn.addToRolePolicy(
+    confirmationMailerFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: [

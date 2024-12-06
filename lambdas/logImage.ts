@@ -22,6 +22,7 @@ export const handler: SQSHandler = async (event) => {
       throw new Error(`Unsupported file type: ${fileExtension}`);
     }
 
+    // Add record to DynamoDB for valid files
     try {
       const params = {
         TableName: tableName,
@@ -33,6 +34,7 @@ export const handler: SQSHandler = async (event) => {
       console.log(`File ${srcKey} added to DynamoDB table.`);
     } catch (error) {
       console.error("Error writing to DynamoDB:", error);
+      throw error;
     }
   }
 };
