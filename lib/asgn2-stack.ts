@@ -8,6 +8,9 @@ import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as sns from "aws-cdk-lib/aws-sns";
 import * as subs from "aws-cdk-lib/aws-sns-subscriptions";
 import * as iam from "aws-cdk-lib/aws-iam";
+import { StreamViewType } from "aws-cdk-lib/aws-dynamodb";
+import { DynamoEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
+import { StartingPosition } from "aws-cdk-lib/aws-lambda";
 
 import { Construct } from "constructs";
 
@@ -61,6 +64,7 @@ export class Asgn2Stack extends cdk.Stack {
         name: "fileName",
         type: cdk.aws_dynamodb.AttributeType.STRING,
       },
+      stream: StreamViewType.NEW_IMAGE,
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Use RETAIN for production
       billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
     });
@@ -105,9 +109,23 @@ export class Asgn2Stack extends cdk.Stack {
       },
     });
 
-    // S3 --> SNS (Object Created Event)
+    const processImageFn = new lambdanode.NodejsFunction(this, "ProcessImageFn", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      entry: `${__dirname}/../lambdas/processImage.ts`,
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 128,
+      environment: {
+        IMAGE_TABLE_NAME: imageTable.tableName,
+      },
+    });
+
+    // S3 --> SNS (Object Created and Deleted Events)
     imagesBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
+      new s3n.SnsDestination(newImageTopic)
+    );
+    imagesBucket.addEventNotification(
+      s3.EventType.OBJECT_REMOVED,
       new s3n.SnsDestination(newImageTopic)
     );
 
@@ -133,6 +151,26 @@ export class Asgn2Stack extends cdk.Stack {
       })
     );
 
+    // S3 Deletion --> SNS --> Lambda (Process Image)
+    newImageTopic.addSubscription(
+      new subs.LambdaSubscription(processImageFn, {
+        filterPolicy: {
+          event_name: sns.SubscriptionFilter.stringFilter({
+            allowlist: ["ObjectRemoved:Delete"]
+          }),
+        },
+      })
+    );
+
+    // DynamoDB Stream --> Lambda (Confirmation Mailer for new images added)
+    confirmationMailerFn.addEventSource(
+      new DynamoEventSource(imageTable, {
+        startingPosition: StartingPosition.LATEST,
+        batchSize: 5,
+        retryAttempts: 2,
+      })
+    );
+
     // Lambda Event Sources
     logImageFn.addEventSource(new events.SqsEventSource(imageLogQueue));
     confirmationMailerFn.addEventSource(
@@ -142,8 +180,10 @@ export class Asgn2Stack extends cdk.Stack {
 
     // Permissions
     imagesBucket.grantReadWrite(logImageFn);
+    imagesBucket.grantReadWrite(processImageFn);
     imageTable.grantWriteData(logImageFn);
     imageTable.grantWriteData(updateTableFn);
+    imageTable.grantWriteData(processImageFn);
 
     confirmationMailerFn.addToRolePolicy(
       new iam.PolicyStatement({
