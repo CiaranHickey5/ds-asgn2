@@ -41,6 +41,13 @@ export class Asgn2Stack extends cdk.Stack {
       maxBatchingWindow: cdk.Duration.seconds(5),
     });
 
+    const imageTable = new cdk.aws_dynamodb.Table(this, "ImageTable", {
+      partitionKey: { name: "fileName", type: cdk.aws_dynamodb.AttributeType.STRING },
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // Use RETAIN for production
+      billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
+    });
+    
+
     // Lambda functions
 
     const logImageFn = new lambdanode.NodejsFunction(
@@ -76,6 +83,9 @@ export class Asgn2Stack extends cdk.Stack {
     // Permissions
 
     imagesBucket.grantRead(logImageFn);
+    imageTable.grantWriteData(logImageFn);
+    
+    logImageFn.addEnvironment("IMAGE_TABLE_NAME", imageTable.tableName);
 
     mailerFn.addToRolePolicy(
       new iam.PolicyStatement({
