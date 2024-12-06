@@ -96,6 +96,16 @@ export class Asgn2Stack extends cdk.Stack {
       entry: `${__dirname}/../lambdas/rejectionMailer.ts`,
     });
 
+    const updateTableFn = new lambdanode.NodejsFunction(this, "UpdateTableFn", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      entry: `${__dirname}/../lambdas/updateTable.ts`,
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 128,
+      environment: {
+        IMAGE_TABLE_NAME: imageTable.tableName,
+      },
+    });
+
     // S3 --> SNS
     imagesBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
@@ -113,10 +123,22 @@ export class Asgn2Stack extends cdk.Stack {
 
     rejectionFn.addEventSource(new events.SqsEventSource(imageDLQ));
 
+    // Add filter policies for metadata to SNS subscriptions
+    newImageTopic.addSubscription(
+      new subs.LambdaSubscription(updateTableFn, {
+        filterPolicy: {
+          metadata_type: sns.SubscriptionFilter.stringFilter({
+            allowlist: ["Caption", "Date", "Photographer"],
+          }),
+        },
+      })
+    );
+
     // Permissions
 
     imagesBucket.grantReadWrite(logImageFn);
     imageTable.grantWriteData(logImageFn);
+    imageTable.grantWriteData(updateTableFn);
 
     confirmationMailerFn.addToRolePolicy(
       new iam.PolicyStatement({
